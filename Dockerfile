@@ -3,7 +3,7 @@
 ###############################################################################
 # Stage 1 — builder: install Python deps into an isolated virtualenv
 ###############################################################################
-FROM python:3.12-slim AS builder
+FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -29,13 +29,13 @@ RUN pip install --upgrade pip \
 ###############################################################################
 # Stage 2 — runtime: minimal image with only the virtualenv + app code
 ###############################################################################
-FROM python:3.12-slim AS runtime
+FROM python:3.11-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     DJANGO_SETTINGS_MODULE=config.settings \
-    PORT=8000
+    PORT=5000
 
 # Runtime OS deps: libpq for psycopg, curl for healthcheck, tini for PID 1
 RUN apt-get update \
@@ -68,14 +68,14 @@ USER app
 RUN DJANGO_SECRET_KEY=build-time-dummy DJANGO_DEBUG=False \
     python manage.py collectstatic --noinput
 
-EXPOSE 8000
+EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${PORT}/health/" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker-entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
+     "--bind", "0.0.0.0:5000", \
      "--workers", "3", \
      "--threads", "2", \
      "--worker-class", "gthread", \
