@@ -6,6 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Core
+<<<<<<< HEAD
 SECRET_KEY = 'expense-tracker-live-secret-key-change-this-before-public-release'
 DEBUG = False
 ALLOWED_HOSTS = [
@@ -20,6 +21,25 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = False
 CSRF_TRUSTED_ORIGINS = [
     'https://apiexpense.bazhilgroups.in',
+=======
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
+# CORE SETTINGS - Hardcoded to bypass environment overrides for immediate fix
+DEBUG = True
+ALLOWED_HOSTS = ['*']
+
+# Behind a proxy (Dokploy/Traefik) — trust X-Forwarded-Proto
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# PROXY SETTINGS - Hardcoded to bypass environment overrides
+USE_X_FORWARDED_HOST = False
+
+# CSRF trusted origins: full scheme+host, comma-separated
+# e.g. "https://api.example.com,https://admin.example.com"
+# CSRF SETTINGS - Explicitly trusting the domain
+CSRF_TRUSTED_ORIGINS = [
+    'https://apiexpense.bazhilgroups.in',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+>>>>>>> 7a5e47cd77ae4e619f40a9a828138f60911a7622
 ]
 
 INSTALLED_APPS = [
