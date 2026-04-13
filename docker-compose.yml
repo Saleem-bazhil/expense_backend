@@ -1,32 +1,6 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-expense_tracker}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-expense_tracker}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   web:
     build: .
     restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
     ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-volumes:
-  postgres_data:
+      - "8000:5000"
