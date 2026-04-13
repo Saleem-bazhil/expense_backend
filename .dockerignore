@@ -1,0 +1,50 @@
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local databases & media
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Secrets & local config
+.env
+.env.*
+!.env.example
+
+# IDE / editor
+.vscode/
+.idea/
+.sixth/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker / CI scratch
+Dockerfile
+docker-compose*.yml
+.dockerignore
+README.md
+*.md
