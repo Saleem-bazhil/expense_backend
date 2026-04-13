@@ -76,6 +76,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker-entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", \
      "--bind", "0.0.0.0:8000", \
+     "--forwarded-allow-ips", "*", \
      "--workers", "3", \
      "--threads", "2", \
      "--worker-class", "gthread", \
