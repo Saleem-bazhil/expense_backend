@@ -59,7 +59,7 @@ ALLOWED_HOSTS = env_hosts('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else 'localhost,1
 
 # Behind a proxy (Dokploy/Traefik) — trust X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_HOST = env_bool('DJANGO_USE_X_FORWARDED_HOST', False)
 
 # CSRF trusted origins: full scheme+host, comma-separated
 # e.g. "https://api.example.com,https://admin.example.com"
