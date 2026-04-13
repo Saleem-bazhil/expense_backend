@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_PRODUCTION_HOSTS = 'localhost,127.0.0.1,apiexpense.bazhilgroups.in'
+DEFAULT_PRODUCTION_ORIGINS = 'https://apiexpense.bazhilgroups.in'
 
 load_dotenv(BASE_DIR / '.env')
 
@@ -55,7 +57,7 @@ def env_origins(name: str, default: str = '') -> list[str]:
 # Core
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
 DEBUG = env_bool('DJANGO_DEBUG', False)
-ALLOWED_HOSTS = env_hosts('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1')
+ALLOWED_HOSTS = env_hosts('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else DEFAULT_PRODUCTION_HOSTS)
 
 # Behind a proxy (Dokploy/Traefik) — trust X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -63,7 +65,7 @@ USE_X_FORWARDED_HOST = env_bool('DJANGO_USE_X_FORWARDED_HOST', False)
 
 # CSRF trusted origins: full scheme+host, comma-separated
 # e.g. "https://api.example.com,https://admin.example.com"
-CSRF_TRUSTED_ORIGINS = env_origins('DJANGO_CSRF_TRUSTED_ORIGINS')
+CSRF_TRUSTED_ORIGINS = env_origins('DJANGO_CSRF_TRUSTED_ORIGINS', DEFAULT_PRODUCTION_ORIGINS if not DEBUG else '')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
