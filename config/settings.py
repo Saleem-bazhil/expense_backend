@@ -56,16 +56,23 @@ def env_origins(name: str, default: str = '') -> list[str]:
 
 # Core
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
-DEBUG = env_bool('DJANGO_DEBUG', True)
-ALLOWED_HOSTS = env_hosts('DJANGO_ALLOWED_HOSTS', '*')
+# CORE SETTINGS - Hardcoded to bypass environment overrides for immediate fix
+DEBUG = True
+ALLOWED_HOSTS = ['*']
 
 # Behind a proxy (Dokploy/Traefik) — trust X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-USE_X_FORWARDED_HOST = env_bool('DJANGO_USE_X_FORWARDED_HOST', True)
+# PROXY SETTINGS - Hardcoded to bypass environment overrides
+USE_X_FORWARDED_HOST = True
 
 # CSRF trusted origins: full scheme+host, comma-separated
 # e.g. "https://api.example.com,https://admin.example.com"
-CSRF_TRUSTED_ORIGINS = env_origins('DJANGO_CSRF_TRUSTED_ORIGINS', DEFAULT_PRODUCTION_ORIGINS if not DEBUG else '')
+# CSRF SETTINGS - Explicitly trusting the domain
+CSRF_TRUSTED_ORIGINS = [
+    'https://apiexpense.bazhilgroups.in',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
