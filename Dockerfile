@@ -35,7 +35,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     DJANGO_SETTINGS_MODULE=config.settings \
-    PORT=5000
+    PORT=8000
 
 # Runtime OS deps: libpq for psycopg, curl for healthcheck, tini for PID 1
 RUN apt-get update \
@@ -68,14 +68,14 @@ USER app
 RUN DJANGO_SECRET_KEY=build-time-dummy DJANGO_DEBUG=False \
     python manage.py collectstatic --noinput
 
-EXPOSE 5000
+EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${PORT}/health/" || exit 1
+    CMD curl -fsS "http://127.0.0.1:8000/health/" || exit 1
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker-entrypoint.sh"]
 CMD ["gunicorn", "config.wsgi:application", \
-     "--bind", "0.0.0.0:5000", \
+     "--bind", "0.0.0.0:8000", \
      "--workers", "3", \
      "--threads", "2", \
      "--worker-class", "gthread", \
