@@ -61,7 +61,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 # Behind a proxy (Dokploy/Traefik) — trust X-Forwarded-Proto
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # PROXY SETTINGS - Hardcoded to bypass environment overrides
 USE_X_FORWARDED_HOST = False
 
