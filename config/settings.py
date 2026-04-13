@@ -3,6 +3,7 @@ Django settings for Expense Tracker project.
 """
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -20,10 +21,41 @@ def env_list(name: str, default: str = '') -> list[str]:
     return [item.strip() for item in raw.split(',') if item.strip()]
 
 
+def normalize_host(value: str) -> str:
+    value = value.strip()
+    if not value:
+        return ''
+    if value == '*':
+        return value
+
+    parsed = urlsplit(value if '://' in value else f'//{value}')
+    host = parsed.hostname or value
+    return host.strip('[]')
+
+
+def env_hosts(name: str, default: str = '') -> list[str]:
+    return [host for item in env_list(name, default) if (host := normalize_host(item))]
+
+
+def normalize_origin(value: str) -> str:
+    value = value.strip().rstrip('/')
+    if not value:
+        return ''
+
+    parsed = urlsplit(value if '://' in value else f'https://{value}')
+    if not parsed.netloc:
+        return ''
+    return f'{parsed.scheme}://{parsed.netloc}'
+
+
+def env_origins(name: str, default: str = '') -> list[str]:
+    return [origin for item in env_list(name, default) if (origin := normalize_origin(item))]
+
+
 # Core
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
 DEBUG = env_bool('DJANGO_DEBUG', False)
-ALLOWED_HOSTS = env_list('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1')
+ALLOWED_HOSTS = env_hosts('DJANGO_ALLOWED_HOSTS', '*' if DEBUG else 'localhost,127.0.0.1')
 
 # Behind a proxy (Dokploy/Traefik) — trust X-Forwarded-Proto
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -31,7 +63,7 @@ USE_X_FORWARDED_HOST = True
 
 # CSRF trusted origins: full scheme+host, comma-separated
 # e.g. "https://api.example.com,https://admin.example.com"
-CSRF_TRUSTED_ORIGINS = env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
+CSRF_TRUSTED_ORIGINS = env_origins('DJANGO_CSRF_TRUSTED_ORIGINS')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -125,7 +157,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CORS — allow specific origins in production; wildcard only when explicitly set
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', DEBUG)
-CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS')
+CORS_ALLOWED_ORIGINS = env_origins('CORS_ALLOWED_ORIGINS')
 
 # REST Framework
 REST_FRAMEWORK = {
