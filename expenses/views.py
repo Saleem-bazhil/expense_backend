@@ -216,7 +216,8 @@ def export_expenses(request):
     if date_to:
         qs = qs.filter(date__lte=date_to)
 
-    fmt = request.query_params.get('format', 'csv')
+    # Note: avoid the name `format` — DRF reserves it for content negotiation.
+    fmt = request.query_params.get('type', 'csv')
 
     if fmt == 'excel':
         # Excel export
