@@ -3,15 +3,34 @@ from datetime import datetime
 from decimal import Decimal
 from io import BytesIO
 
+from django.contrib.auth import authenticate
 from django.db.models import Sum, Q, F, Window
 from django.db.models.functions import Coalesce, TruncMonth
 from django.http import HttpResponse
 from rest_framework import viewsets, status
-from rest_framework.decorators import api_view
+from rest_framework.authtoken.models import Token
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+
+from rest_framework.pagination import PageNumberPagination
 
 from .models import Branch, Expense
 from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer
+
+
+class ExpensePagination(PageNumberPagination):
+    """Pagination that exposes `page_size` in every response — lets the
+    frontend compute total pages without hardcoding the size."""
+
+    def get_paginated_response(self, data):
+        return Response({
+            'count': self.page.paginator.count,
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'page_size': self.get_page_size(self.request),
+            'results': data,
+        })
 
 
 class BranchViewSet(viewsets.ModelViewSet):
@@ -23,6 +42,8 @@ class BranchViewSet(viewsets.ModelViewSet):
 
 class ExpenseViewSet(viewsets.ModelViewSet):
     """CRUD for expenses with filtering and running balance."""
+
+    pagination_class = ExpensePagination
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -268,3 +289,61 @@ def export_expenses(request):
             ])
 
         return response
+
+
+# ---------------------------------------------------------------------------
+# Categories — expose model choices so the frontend doesn't hardcode them.
+# ---------------------------------------------------------------------------
+@api_view(['GET'])
+def categories_view(request):
+    """Single source of truth for expense categories (drawn from the model)."""
+    return Response([value for value, _ in Expense.CATEGORY_CHOICES])
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_view(request):
+    """Username + password → token. Used by the SPA login form."""
+    username = (request.data.get('username') or '').strip()
+    password = request.data.get('password') or ''
+
+    if not username or not password:
+        return Response(
+            {'detail': 'Username and password are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = authenticate(request, username=username, password=password)
+    if user is None or not user.is_active:
+        return Response(
+            {'detail': 'Invalid credentials.'},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({
+        'token': token.key,
+        'username': user.username,
+        'is_staff': user.is_staff,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout_view(request):
+    """Invalidate the caller's token."""
+    Token.objects.filter(user=request.user).delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def me_view(request):
+    """Return current user info — used to verify a stored token is still valid."""
+    return Response({
+        'username': request.user.username,
+        'is_staff': request.user.is_staff,
+    })
