@@ -135,12 +135,12 @@ def dashboard_view(request):
 
     # Branch-wise (for bar chart)
     branch_data = (
-        qs.values('branch__name')
+        qs.values('branch__location')
         .annotate(
             total_credit=Coalesce(Sum('credited_amount'), Decimal('0.00')),
             total_debit=Coalesce(Sum('debited_amount'), Decimal('0.00')),
         )
-        .order_by('branch__name')
+        .order_by('branch__location')
     )
 
     return Response({
@@ -165,7 +165,7 @@ def dashboard_view(request):
         ],
         'branch_breakdown': [
             {
-                'branch': item['branch__name'],
+                'branch': item['branch__location'],
                 'total_credit': str(item['total_credit']),
                 'total_debit': str(item['total_debit']),
             }
@@ -218,7 +218,7 @@ def export_expenses(request):
                     idx,
                     expense.date.strftime('%Y-%m-%d'),
                     expense.category,
-                    expense.branch.name,
+                    expense.branch.location,
                     float(credit),
                     expense.credit_remark,
                     float(debit),
@@ -259,7 +259,7 @@ def export_expenses(request):
                 idx,
                 expense.date.strftime('%Y-%m-%d'),
                 expense.category,
-                expense.branch.name,
+                expense.branch.location,
                 credit,
                 expense.credit_remark,
                 debit,

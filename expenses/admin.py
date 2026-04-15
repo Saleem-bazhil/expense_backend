@@ -4,7 +4,7 @@ from .models import Branch, Expense
 
 @admin.register(Branch)
 class BranchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'location', 'current_balance')
+    list_display = ('location', 'current_balance')
 
 
 @admin.register(Expense)

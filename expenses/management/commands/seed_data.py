@@ -12,21 +12,12 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write('Seeding database...')
 
-        # Create branches
-        branches_data = [
-            {'name': 'Head Office', 'location': 'Chennai'},
-            {'name': 'North Branch', 'location': 'Delhi'},
-            {'name': 'West Branch', 'location': 'Mumbai'},
-            {'name': 'South Branch', 'location': 'Bangalore'},
-            {'name': 'East Branch', 'location': 'Kolkata'},
-        ]
+        # Create branches (identified by location)
+        locations = ['Chennai', 'Delhi', 'Mumbai', 'Bangalore', 'Kolkata']
 
         branches = []
-        for bd in branches_data:
-            branch, created = Branch.objects.get_or_create(
-                name=bd['name'],
-                defaults={'location': bd['location']}
-            )
+        for loc in locations:
+            branch, created = Branch.objects.get_or_create(location=loc)
             branches.append(branch)
             action = 'Created' if created else 'Exists'
             self.stdout.write(f'  {action}: {branch}')

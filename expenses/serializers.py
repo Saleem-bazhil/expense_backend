@@ -9,11 +9,11 @@ class BranchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Branch
-        fields = ['id', 'name', 'location', 'current_balance', 'created_at']
+        fields = ['id', 'location', 'current_balance', 'created_at']
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
-    branch_name = serializers.CharField(source='branch.name', read_only=True)
+    branch_location = serializers.CharField(source='branch.location', read_only=True)
     running_balance = serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True, required=False
     )
@@ -21,7 +21,7 @@ class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = [
-            'id', 'date', 'category', 'branch', 'branch_name',
+            'id', 'date', 'category', 'branch', 'branch_location',
             'credited_amount', 'credit_remark',
             'debited_amount', 'debit_remark',
             'running_balance', 'created_at',
