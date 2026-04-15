@@ -1,6 +1,15 @@
+# Local-dev compose. Production deploy is via Dokploy (uses Dockerfile directly).
 services:
   web:
     build: .
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
-      - "8000:5000"
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
