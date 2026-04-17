@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from .models import Branch, Expense, PaymentModeBalance
 
@@ -77,6 +78,38 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"debited_amount": "Amount must be positive."}
             )
+
+        if debit is not None and debit > 0:
+            mode = data.get('debit_payment_mode') or ''
+            if self.instance and not mode:
+                mode = self.instance.debit_payment_mode or ''
+                
+            if mode:
+                from .models import PaymentModeBalance
+                from django.db.models import Sum
+                from django.db.models.functions import Coalesce
+                
+                try:
+                    bal = PaymentModeBalance.objects.get(payment_mode=mode)
+                    initial = bal.initial_balance
+                except PaymentModeBalance.DoesNotExist:
+                    initial = Decimal('0.00')
+
+                total_credits = Expense.objects.filter(credit_payment_mode=mode).aggregate(
+                    t=Coalesce(Sum('credited_amount'), Decimal('0.00'))
+                )['t']
+                total_debits = Expense.objects.filter(debit_payment_mode=mode).aggregate(
+                    t=Coalesce(Sum('debited_amount'), Decimal('0.00'))
+                )['t']
+
+                current_balance = initial + total_credits - total_debits
+                if self.instance and self.instance.debit_payment_mode == mode:
+                    current_balance += (self.instance.debited_amount or Decimal('0.00'))
+
+                if current_balance < debit:
+                    raise serializers.ValidationError(
+                        f"Insufficient funds! You have only \u20b9{current_balance:,.2f} balance in {mode}."
+                    )
 
         return data
 

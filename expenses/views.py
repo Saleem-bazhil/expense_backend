@@ -141,12 +141,16 @@ def dashboard_view(request):
     if date_to:
         qs = qs.filter(date__lte=date_to)
 
-    # Totals
     totals = qs.aggregate(
         total_credits=Coalesce(Sum('credited_amount'), Decimal('0.00')),
         total_debits=Coalesce(Sum('debited_amount'), Decimal('0.00')),
     )
-    total_balance = totals['total_credits'] - totals['total_debits']
+    
+    # Total Balance is the sum of all Payment Mode balances (Company-wide absolute balance)
+    total_initial = PaymentModeBalance.objects.aggregate(t=Coalesce(Sum('initial_balance'), Decimal('0.00')))['t']
+    global_credits = Expense.objects.aggregate(t=Coalesce(Sum('credited_amount'), Decimal('0.00')))['t']
+    global_debits = Expense.objects.aggregate(t=Coalesce(Sum('debited_amount'), Decimal('0.00')))['t']
+    total_balance = total_initial + global_credits - global_debits
 
     # Category breakdown (for pie chart)
     category_data = (
