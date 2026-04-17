@@ -34,6 +34,8 @@ class Expense(models.Model):
         ('Food', 'Food'),
         ('Travel', 'Travel'),
         ('Snacks', 'Snacks'),
+        ('Stationary', 'Stationary'),
+        ('Toolkit', 'Toolkit'),
         ('Misc', 'Misc'),
     ]
 
@@ -52,6 +54,21 @@ class Expense(models.Model):
         default=None,
     )
     credit_remark = models.CharField(max_length=300, blank=True, default='')
+    credit_person = models.CharField(max_length=200, blank=True, default='')
+    credit_payment_mode = models.CharField(
+        max_length=30,
+        blank=True,
+        default='',
+        choices=[
+            ('Cash', 'Cash'),
+            ('Bank Transfer', 'Bank Transfer'),
+            ('GPay', 'GPay'),
+            ('PhonePe', 'PhonePe'),
+            ('UPI', 'UPI'),
+            ('Cheque', 'Cheque'),
+            ('Other', 'Other'),
+        ],
+    )
     debited_amount = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -60,6 +77,21 @@ class Expense(models.Model):
         default=None,
     )
     debit_remark = models.CharField(max_length=300, blank=True, default='')
+    debit_person = models.CharField(max_length=200, blank=True, default='')
+    debit_payment_mode = models.CharField(
+        max_length=30,
+        blank=True,
+        default='',
+        choices=[
+            ('Cash', 'Cash'),
+            ('Bank Transfer', 'Bank Transfer'),
+            ('GPay', 'GPay'),
+            ('PhonePe', 'PhonePe'),
+            ('UPI', 'UPI'),
+            ('Cheque', 'Cheque'),
+            ('Other', 'Other'),
+        ],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -68,3 +100,36 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.date} | {self.category} | {self.branch.name}"
+
+
+PAYMENT_MODE_CHOICES = [
+    ('Cash', 'Cash'),
+    ('Bank Transfer', 'Bank Transfer'),
+    ('GPay', 'GPay'),
+    ('PhonePe', 'PhonePe'),
+    ('UPI', 'UPI'),
+    ('Cheque', 'Cheque'),
+    ('Other', 'Other'),
+]
+
+
+class PaymentModeBalance(models.Model):
+    """Tracks initial balance for each payment mode."""
+    payment_mode = models.CharField(
+        max_length=30,
+        choices=PAYMENT_MODE_CHOICES,
+        unique=True,
+    )
+    initial_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['payment_mode']
+
+    def __str__(self):
+        return f"{self.payment_mode}: {self.initial_balance}"

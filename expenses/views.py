@@ -15,8 +15,8 @@ from rest_framework.response import Response
 
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Branch, Expense
-from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer
+from .models import Branch, Expense, PaymentModeBalance
+from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer, PaymentModeBalanceSerializer
 
 
 class ExpensePagination(PageNumberPagination):
@@ -77,6 +77,8 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(credit_remark__icontains=search) |
                 Q(debit_remark__icontains=search) |
+                Q(credit_person__icontains=search) |
+                Q(debit_person__icontains=search) |
                 Q(category__icontains=search)
             )
 
@@ -88,12 +90,25 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
         # Calculate running balance
         expenses = list(queryset)
-        running_balance = Decimal('0.00')
+        initial_balances = {m.payment_mode: m.initial_balance for m in PaymentModeBalance.objects.all()}
+        balances = {}
         for expense in expenses:
             credit = expense.credited_amount or Decimal('0.00')
             debit = expense.debited_amount or Decimal('0.00')
-            running_balance += credit - debit
-            expense.running_balance = running_balance
+            
+            if debit > 0:
+                mode = expense.debit_payment_mode or 'Other'
+                if mode not in balances:
+                    balances[mode] = initial_balances.get(mode, Decimal('0.00'))
+                balances[mode] -= debit
+                
+            if credit > 0:
+                mode = expense.credit_payment_mode or 'Other'
+                if mode not in balances:
+                    balances[mode] = initial_balances.get(mode, Decimal('0.00'))
+                balances[mode] += credit
+                
+            expense.running_balances = balances.copy()
 
         # Pagination
         page = self.paginate_queryset(expenses)
@@ -228,14 +243,31 @@ def export_expenses(request):
             ws.title = 'Expenses'
 
             headers = ['S.No', 'Date', 'Category', 'Branch', 'Credit Amount',
-                        'Credit Remark', 'Debit Amount', 'Debit Remark', 'Running Balance']
+                        'Credit Remark', 'Credit Person', 'Credit Payment Mode',
+                        'Debit Amount', 'Debit Remark', 'Debit Person',
+                        'Debit Payment Mode', 'Running Balance']
             ws.append(headers)
 
-            running_balance = Decimal('0.00')
+            initial_balances = {m.payment_mode: m.initial_balance for m in PaymentModeBalance.objects.all()}
+            balances = {}
             for idx, expense in enumerate(qs, 1):
                 credit = expense.credited_amount or Decimal('0.00')
                 debit = expense.debited_amount or Decimal('0.00')
-                running_balance += credit - debit
+                if debit > 0:
+                    mode = expense.debit_payment_mode or 'Other'
+                    if mode not in balances:
+                        balances[mode] = initial_balances.get(mode, Decimal('0.00'))
+                    balances[mode] -= debit
+                    
+                if credit > 0:
+                    mode = expense.credit_payment_mode or 'Other'
+                    if mode not in balances:
+                        balances[mode] = initial_balances.get(mode, Decimal('0.00'))
+                    balances[mode] += credit
+
+                running_balance = " | ".join(f"{k}: {float(v)}" for k, v in balances.items() if v != Decimal('0.00'))
+
+
                 ws.append([
                     idx,
                     expense.date.strftime('%Y-%m-%d'),
@@ -243,9 +275,13 @@ def export_expenses(request):
                     expense.branch.location,
                     float(credit),
                     expense.credit_remark,
+                    expense.credit_person,
+                    expense.credit_payment_mode,
                     float(debit),
                     expense.debit_remark,
-                    float(running_balance),
+                    expense.debit_person,
+                    expense.debit_payment_mode,
+                    running_balance,
                 ])
 
             buffer = BytesIO()
@@ -270,13 +306,30 @@ def export_expenses(request):
 
         writer = csv.writer(response)
         writer.writerow(['S.No', 'Date', 'Category', 'Branch', 'Credit Amount',
-                          'Credit Remark', 'Debit Amount', 'Debit Remark', 'Running Balance'])
+                          'Credit Remark', 'Credit Person', 'Credit Payment Mode',
+                          'Debit Amount', 'Debit Remark', 'Debit Person',
+                          'Debit Payment Mode', 'Running Balance'])
 
-        running_balance = Decimal('0.00')
+        initial_balances = {m.payment_mode: m.initial_balance for m in PaymentModeBalance.objects.all()}
+        balances = {}
         for idx, expense in enumerate(qs, 1):
             credit = expense.credited_amount or Decimal('0.00')
             debit = expense.debited_amount or Decimal('0.00')
-            running_balance += credit - debit
+            if debit > 0:
+                mode = expense.debit_payment_mode or 'Other'
+                if mode not in balances:
+                    balances[mode] = initial_balances.get(mode, Decimal('0.00'))
+                balances[mode] -= debit
+                
+            if credit > 0:
+                mode = expense.credit_payment_mode or 'Other'
+                if mode not in balances:
+                    balances[mode] = initial_balances.get(mode, Decimal('0.00'))
+                balances[mode] += credit
+
+            running_balance = " | ".join(f"{k}: {float(v)}" for k, v in balances.items() if v != Decimal('0.00'))
+
+
             writer.writerow([
                 idx,
                 expense.date.strftime('%Y-%m-%d'),
@@ -284,12 +337,96 @@ def export_expenses(request):
                 expense.branch.location,
                 credit,
                 expense.credit_remark,
+                expense.credit_person,
+                expense.credit_payment_mode,
                 debit,
                 expense.debit_remark,
+                expense.debit_person,
+                expense.debit_payment_mode,
                 running_balance,
             ])
 
         return response
+
+
+# ---------------------------------------------------------------------------
+# Payment Mode Balances
+# ---------------------------------------------------------------------------
+@api_view(['GET'])
+def payment_mode_balances_view(request):
+    """Return all payment modes with initial + current balance, including those only present in expenses."""
+    balances = list(PaymentModeBalance.objects.all())
+    explicit_modes = {b.payment_mode for b in balances}
+    
+    credit_modes = Expense.objects.exclude(credit_payment_mode='').values_list('credit_payment_mode', flat=True).distinct()
+    debit_modes = Expense.objects.exclude(debit_payment_mode='').values_list('debit_payment_mode', flat=True).distinct()
+    
+    all_used_modes = set(credit_modes).union(set(debit_modes))
+    missing_modes = all_used_modes - explicit_modes
+    
+    for mode in missing_modes:
+        if mode:
+            balances.append(PaymentModeBalance(
+                id=len(balances) + 9999, # Fake ID to bypass frontend unique key warnings
+                payment_mode=mode,
+                initial_balance=Decimal('0.00')
+            ))
+
+    result = []
+    for bal in balances:
+        mode = bal.payment_mode
+        # Credits with this payment mode
+        total_credits = Expense.objects.filter(
+            credit_payment_mode=mode
+        ).aggregate(
+            total=Coalesce(Sum('credited_amount'), Decimal('0.00'))
+        )['total']
+        # Debits with this payment mode
+        total_debits = Expense.objects.filter(
+            debit_payment_mode=mode
+        ).aggregate(
+            total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
+        )['total']
+        current = bal.initial_balance + total_credits - total_debits
+        bal.current_balance = current
+        result.append(bal)
+
+    serializer = PaymentModeBalanceSerializer(result, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+def payment_mode_balance_set(request):
+    """Create or update initial balance for a payment mode."""
+    mode = request.data.get('payment_mode', '').strip()
+    initial = request.data.get('initial_balance')
+
+    if not mode:
+        return Response(
+            {'detail': 'payment_mode is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    obj, created = PaymentModeBalance.objects.update_or_create(
+        payment_mode=mode,
+        defaults={'initial_balance': Decimal(str(initial or 0))},
+    )
+
+    # Compute current balance
+    total_credits = Expense.objects.filter(
+        credit_payment_mode=mode
+    ).aggregate(
+        total=Coalesce(Sum('credited_amount'), Decimal('0.00'))
+    )['total']
+    total_debits = Expense.objects.filter(
+        debit_payment_mode=mode
+    ).aggregate(
+        total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
+    )['total']
+    obj.current_balance = obj.initial_balance + total_credits - total_debits
+
+    serializer = PaymentModeBalanceSerializer(obj)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------

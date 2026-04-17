@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Branch, Expense
+from .models import Branch, Expense, PaymentModeBalance
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -14,17 +14,15 @@ class BranchSerializer(serializers.ModelSerializer):
 
 class ExpenseSerializer(serializers.ModelSerializer):
     branch_location = serializers.CharField(source='branch.location', read_only=True)
-    running_balance = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True, required=False
-    )
+    running_balances = serializers.JSONField(read_only=True, required=False)
 
     class Meta:
         model = Expense
         fields = [
             'id', 'date', 'category', 'branch', 'branch_location',
-            'credited_amount', 'credit_remark',
-            'debited_amount', 'debit_remark',
-            'running_balance', 'created_at',
+            'credited_amount', 'credit_remark', 'credit_person', 'credit_payment_mode',
+            'debited_amount', 'debit_remark', 'debit_person', 'debit_payment_mode',
+            'running_balances', 'created_at',
         ]
 
     def validate(self, data):
@@ -57,8 +55,8 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         model = Expense
         fields = [
             'id', 'date', 'category', 'branch',
-            'credited_amount', 'credit_remark',
-            'debited_amount', 'debit_remark',
+            'credited_amount', 'credit_remark', 'credit_person', 'credit_payment_mode',
+            'debited_amount', 'debit_remark', 'debit_person', 'debit_payment_mode',
         ]
 
     def validate(self, data):
@@ -81,3 +79,13 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
             )
 
         return data
+
+
+class PaymentModeBalanceSerializer(serializers.ModelSerializer):
+    current_balance = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True, required=False
+    )
+
+    class Meta:
+        model = PaymentModeBalance
+        fields = ['id', 'payment_mode', 'initial_balance', 'current_balance']
