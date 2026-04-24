@@ -52,6 +52,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
 class ExpenseCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating expenses."""
 
+    branch = serializers.CharField()
+    
     class Meta:
         model = Expense
         fields = [
@@ -59,6 +61,13 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
             'credited_amount', 'credit_remark', 'credit_person', 'credit_payment_mode',
             'debited_amount', 'debit_remark', 'debit_person', 'debit_payment_mode',
         ]
+
+    def validate_branch(self, value):
+        """Find or create branch by location name."""
+        if not value:
+            raise serializers.ValidationError("Branch location is required.")
+        branch, _ = Branch.objects.get_or_create(location=value)
+        return branch
 
     def validate(self, data):
         credit = data.get('credited_amount')
