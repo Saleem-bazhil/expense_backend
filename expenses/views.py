@@ -53,10 +53,13 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Expense.objects.select_related('branch').all()
 
-        # Filter by branch
-        branch_id = self.request.query_params.get('branch')
-        if branch_id:
-            qs = qs.filter(branch_id=branch_id)
+        # Filter by branch (can be ID or location name)
+        branch_val = self.request.query_params.get('branch')
+        if branch_val:
+            if branch_val.isdigit():
+                qs = qs.filter(branch_id=branch_val)
+            else:
+                qs = qs.filter(branch__location__icontains=branch_val)
 
         # Filter by category
         category = self.request.query_params.get('category')
