@@ -40,7 +40,7 @@ class Expense(models.Model):
     ]
 
     date = models.DateField()
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    category = models.CharField(max_length=100)
     branch = models.ForeignKey(
         Branch,
         on_delete=models.CASCADE,
