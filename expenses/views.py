@@ -129,9 +129,12 @@ def dashboard_view(request):
     qs = Expense.objects.all()
 
     # Apply same filters
-    branch_id = request.query_params.get('branch')
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+    branch_val = request.query_params.get('branch')
+    if branch_val:
+        if branch_val.isdigit():
+            qs = qs.filter(branch_id=branch_val)
+        else:
+            qs = qs.filter(branch__location__icontains=branch_val)
 
     category = request.query_params.get('category')
     if category:
@@ -223,9 +226,12 @@ def export_expenses(request):
     qs = Expense.objects.select_related('branch').all().order_by('date', 'created_at')
 
     # Apply filters
-    branch_id = request.query_params.get('branch')
-    if branch_id:
-        qs = qs.filter(branch_id=branch_id)
+    branch_val = request.query_params.get('branch')
+    if branch_val:
+        if branch_val.isdigit():
+            qs = qs.filter(branch_id=branch_val)
+        else:
+            qs = qs.filter(branch__location__icontains=branch_val)
 
     category = request.query_params.get('category')
     if category:
