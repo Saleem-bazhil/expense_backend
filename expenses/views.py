@@ -179,8 +179,8 @@ def dashboard_view(request):
         .order_by('month')
     )
 
-    # Branch-wise (for bar chart)
-    branch_data = (
+    # Branch-wise (for bar chart and detailed breakdown)
+    branch_qs = (
         qs.values('branch__location')
         .annotate(
             total_credit=Coalesce(Sum('credited_amount'), Decimal('0.00')),
@@ -188,6 +188,34 @@ def dashboard_view(request):
         )
         .order_by('branch__location')
     )
+
+    branch_breakdown = []
+    for item in branch_qs:
+        location = item['branch__location']
+        # Category breakdown for THIS branch (scoped to current filters)
+        branch_cats = (
+            qs.filter(branch__location=location)
+            .values('category')
+            .annotate(
+                total_credit=Coalesce(Sum('credited_amount'), Decimal('0.00')),
+                total_debit=Coalesce(Sum('debited_amount'), Decimal('0.00')),
+            )
+            .order_by('-total_debit')
+        )
+
+        branch_breakdown.append({
+            'branch': location,
+            'total_credit': str(item['total_credit']),
+            'total_debit': str(item['total_debit']),
+            'category_breakdown': [
+                {
+                    'category': c['category'],
+                    'total_credit': str(c['total_credit']),
+                    'total_debit': str(c['total_debit']),
+                }
+                for c in branch_cats
+            ]
+        })
 
     return Response({
         'total_balance': str(total_balance),
@@ -209,14 +237,7 @@ def dashboard_view(request):
             }
             for item in monthly_data
         ],
-        'branch_breakdown': [
-            {
-                'branch': item['branch__location'],
-                'total_credit': str(item['total_credit']),
-                'total_debit': str(item['total_debit']),
-            }
-            for item in branch_data
-        ],
+        'branch_breakdown': branch_breakdown,
     })
 
 
