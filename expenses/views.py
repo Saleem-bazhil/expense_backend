@@ -15,8 +15,8 @@ from rest_framework.response import Response
 
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Branch, Expense, PaymentModeBalance
-from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer, PaymentModeBalanceSerializer
+from .models import Branch, Expense, PaymentModeBalance, BillingReminder
+from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer, PaymentModeBalanceSerializer, BillingReminderSerializer
 
 
 class ExpensePagination(PageNumberPagination):
@@ -569,3 +569,65 @@ def me_view(request):
         'username': request.user.username,
         'is_staff': request.user.is_staff,
     })
+
+
+# ---------------------------------------------------------------------------
+# Billing Reminders
+# ---------------------------------------------------------------------------
+@api_view(['GET'])
+def billing_reminders_list(request):
+    """List all billing reminders."""
+    reminders = BillingReminder.objects.all()
+    serializer = BillingReminderSerializer(reminders, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+def billing_reminder_create(request):
+    """Create a new billing reminder."""
+    serializer = BillingReminderSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PUT'])
+def billing_reminder_update(request, pk):
+    """Update a billing reminder."""
+    try:
+        reminder = BillingReminder.objects.get(pk=pk)
+    except BillingReminder.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = BillingReminderSerializer(reminder, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PATCH'])
+def billing_reminder_toggle_paid(request, pk):
+    """Toggle the is_paid status of a billing reminder."""
+    try:
+        reminder = BillingReminder.objects.get(pk=pk)
+    except BillingReminder.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    reminder.is_paid = not reminder.is_paid
+    reminder.save()
+    serializer = BillingReminderSerializer(reminder)
+    return Response(serializer.data)
+
+
+@api_view(['DELETE'])
+def billing_reminder_delete(request, pk):
+    """Delete a billing reminder."""
+    try:
+        reminder = BillingReminder.objects.get(pk=pk)
+    except BillingReminder.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    reminder.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
