@@ -388,7 +388,33 @@ def export_expenses(request):
 # ---------------------------------------------------------------------------
 @api_view(['GET'])
 def payment_mode_balances_view(request):
-    """Return all payment modes with initial + current balance, including those only present in expenses."""
+    """Return all payment modes with initial + current balance, including those only present in expenses.
+    
+    Supports filtering:
+      - fy: Financial year, e.g. '2025-2026' (April to March)
+      - date_from / date_to: Custom date range
+    """
+    # Build expense filter based on query params
+    expense_filter = Q()
+    fy = request.query_params.get('fy')
+    date_from = request.query_params.get('date_from')
+    date_to = request.query_params.get('date_to')
+
+    if fy:
+        # Financial year format: '2025-2026' means April 2025 to March 2026
+        try:
+            parts = fy.split('-')
+            start_year = int(parts[0])
+            end_year = int(parts[1])
+            expense_filter &= Q(date__gte=f'{start_year}-04-01', date__lte=f'{end_year}-03-31')
+        except (ValueError, IndexError):
+            pass
+    else:
+        if date_from:
+            expense_filter &= Q(date__gte=date_from)
+        if date_to:
+            expense_filter &= Q(date__lte=date_to)
+
     balances = list(PaymentModeBalance.objects.all())
     explicit_modes = {b.payment_mode for b in balances}
     
@@ -409,20 +435,22 @@ def payment_mode_balances_view(request):
     result = []
     for bal in balances:
         mode = bal.payment_mode
-        # Credits with this payment mode
+        # Credits with this payment mode (filtered)
         total_credits = Expense.objects.filter(
-            credit_payment_mode=mode
+            expense_filter, credit_payment_mode=mode
         ).aggregate(
             total=Coalesce(Sum('credited_amount'), Decimal('0.00'))
         )['total']
-        # Debits with this payment mode
+        # Debits with this payment mode (filtered)
         total_debits = Expense.objects.filter(
-            debit_payment_mode=mode
+            expense_filter, debit_payment_mode=mode
         ).aggregate(
             total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
         )['total']
         current = bal.initial_balance + total_credits - total_debits
         bal.current_balance = current
+        bal.total_credits = total_credits
+        bal.total_debits = total_debits
         result.append(bal)
 
     serializer = PaymentModeBalanceSerializer(result, many=True)
@@ -461,6 +489,28 @@ def payment_mode_balance_set(request):
 
     serializer = PaymentModeBalanceSerializer(obj)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+def payment_mode_balance_delete(request):
+    """Delete a payment mode balance entry."""
+    mode = request.data.get('payment_mode', '').strip()
+
+    if not mode:
+        return Response(
+            {'detail': 'payment_mode is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        obj = PaymentModeBalance.objects.get(payment_mode=mode)
+        obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    except PaymentModeBalance.DoesNotExist:
+        return Response(
+            {'detail': f'Payment mode "{mode}" not found.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
 
 
 # ---------------------------------------------------------------------------
