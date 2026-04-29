@@ -133,3 +133,40 @@ class PaymentModeBalance(models.Model):
 
     def __str__(self):
         return f"{self.payment_mode}: {self.initial_balance}"
+
+
+class BillingReminder(models.Model):
+    """Recurring bill / expense reminder (e.g. WiFi, electricity, rent)."""
+
+    FREQUENCY_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly'),
+        ('half_yearly', 'Half Yearly'),
+        ('yearly', 'Yearly'),
+        ('one_time', 'One Time'),
+    ]
+
+    title = models.CharField(max_length=200)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    due_day = models.PositiveIntegerField(
+        help_text='Day of month when bill is due (1-31)',
+        default=1,
+    )
+    frequency = models.CharField(
+        max_length=20,
+        choices=FREQUENCY_CHOICES,
+        default='monthly',
+    )
+    category = models.CharField(max_length=100, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    is_paid = models.BooleanField(default=False)
+    next_due_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['next_due_date', 'due_day']
+
+    def __str__(self):
+        return f"{self.title} — ₹{self.amount} ({self.get_frequency_display()})"
+
