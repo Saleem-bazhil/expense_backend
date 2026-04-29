@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from .models import Branch, Expense, PaymentModeBalance
+from .models import Branch, Expense, PaymentModeBalance, BillingReminder
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -137,3 +137,13 @@ class PaymentModeBalanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentModeBalance
         fields = ['id', 'payment_mode', 'initial_balance', 'current_balance', 'total_credits', 'total_debits']
+
+
+class BillingReminderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BillingReminder
+        fields = [
+            'id', 'title', 'amount', 'due_day', 'frequency',
+            'category', 'notes', 'is_paid', 'next_due_date',
+            'created_at', 'updated_at',
+        ]
