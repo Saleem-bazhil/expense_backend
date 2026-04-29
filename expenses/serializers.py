@@ -127,7 +127,13 @@ class PaymentModeBalanceSerializer(serializers.ModelSerializer):
     current_balance = serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True, required=False
     )
+    total_credits = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True, required=False
+    )
+    total_debits = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True, required=False
+    )
 
     class Meta:
         model = PaymentModeBalance
-        fields = ['id', 'payment_mode', 'initial_balance', 'current_balance']
+        fields = ['id', 'payment_mode', 'initial_balance', 'current_balance', 'total_credits', 'total_debits']
