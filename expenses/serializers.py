@@ -140,10 +140,13 @@ class PaymentModeBalanceSerializer(serializers.ModelSerializer):
 
 
 class BillingReminderSerializer(serializers.ModelSerializer):
+    branch_location = serializers.CharField(source='branch.location', read_only=True)
+
     class Meta:
         model = BillingReminder
         fields = [
             'id', 'title', 'amount', 'due_day', 'frequency',
             'category', 'notes', 'is_paid', 'next_due_date',
+            'branch', 'branch_location',
             'created_at', 'updated_at',
         ]

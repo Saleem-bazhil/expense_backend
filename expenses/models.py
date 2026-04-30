@@ -158,6 +158,13 @@ class BillingReminder(models.Model):
         default='monthly',
     )
     category = models.CharField(max_length=100, blank=True, default='')
+    branch = models.ForeignKey(
+        'Branch',
+        on_delete=models.CASCADE,
+        related_name='billing_reminders',
+        null=True,
+        blank=True
+    )
     notes = models.TextField(blank=True, default='')
     is_paid = models.BooleanField(default=False)
     next_due_date = models.DateField(null=True, blank=True)
