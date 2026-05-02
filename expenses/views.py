@@ -400,18 +400,21 @@ def payment_mode_balances_view(request):
     date_from = request.query_params.get('date_from')
     date_to = request.query_params.get('date_to')
 
+    start_date = None
     if fy:
         # Financial year format: '2025-2026' means April 2025 to March 2026
         try:
             parts = fy.split('-')
             start_year = int(parts[0])
             end_year = int(parts[1])
-            expense_filter &= Q(date__gte=f'{start_year}-04-01', date__lte=f'{end_year}-03-31')
+            start_date = f'{start_year}-04-01'
+            expense_filter &= Q(date__gte=start_date, date__lte=f'{end_year}-03-31')
         except (ValueError, IndexError):
             pass
     else:
         if date_from:
             expense_filter &= Q(date__gte=date_from)
+            start_date = date_from
         if date_to:
             expense_filter &= Q(date__lte=date_to)
 
@@ -435,6 +438,24 @@ def payment_mode_balances_view(request):
     result = []
     for bal in balances:
         mode = bal.payment_mode
+        
+        # Calculate initial balance up to just before the selected range
+        initial_balance = bal.initial_balance
+        if start_date:
+            credits_before = Expense.objects.filter(
+                date__lt=start_date, credit_payment_mode=mode
+            ).aggregate(
+                total=Coalesce(Sum('credited_amount'), Decimal('0.00'))
+            )['total']
+            
+            debits_before = Expense.objects.filter(
+                date__lt=start_date, debit_payment_mode=mode
+            ).aggregate(
+                total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
+            )['total']
+            
+            initial_balance = initial_balance + credits_before - debits_before
+
         # Credits with this payment mode (filtered)
         total_credits = Expense.objects.filter(
             expense_filter, credit_payment_mode=mode
@@ -447,7 +468,9 @@ def payment_mode_balances_view(request):
         ).aggregate(
             total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
         )['total']
-        current = bal.initial_balance + total_credits - total_debits
+        
+        current = initial_balance + total_credits - total_debits
+        bal.initial_balance = initial_balance
         bal.current_balance = current
         bal.total_credits = total_credits
         bal.total_debits = total_debits
@@ -455,6 +478,7 @@ def payment_mode_balances_view(request):
 
     serializer = PaymentModeBalanceSerializer(result, many=True)
     return Response(serializer.data)
+
 
 
 @api_view(['POST'])
