@@ -397,19 +397,47 @@ def payment_mode_balances_view(request):
     # Build expense filter based on query params
     expense_filter = Q()
     fy = request.query_params.get('fy')
+    month = request.query_params.get('month')
     date_from = request.query_params.get('date_from')
     date_to = request.query_params.get('date_to')
 
     start_date = None
+    end_date = None
+
     if fy:
-        # Financial year format: '2025-2026' means April 2025 to March 2026
         try:
             parts = fy.split('-')
             start_year = int(parts[0])
             end_year = int(parts[1])
-            start_date = f'{start_year}-04-01'
-            expense_filter &= Q(date__gte=start_date, date__lte=f'{end_year}-03-31')
+            
+            if month:
+                # month is 1-12
+                m = int(month)
+                # In India, FY starts in April. 
+                # April (4) to Dec (12) are in start_year. 
+                # Jan (1) to March (3) are in end_year.
+                year = start_year if m >= 4 else end_year
+                import calendar
+                _, last_day = calendar.monthrange(year, m)
+                start_date = f'{year}-{m:02d}-01'
+                end_date = f'{year}-{m:02d}-{last_day:02d}'
+            else:
+                start_date = f'{start_year}-04-01'
+                end_date = f'{end_year}-03-31'
+            
+            expense_filter &= Q(date__gte=start_date, date__lte=end_date)
         except (ValueError, IndexError):
+            pass
+    elif month:
+        try:
+            m = int(month)
+            year = datetime.now().year
+            import calendar
+            _, last_day = calendar.monthrange(year, m)
+            start_date = f'{year}-{m:02d}-01'
+            end_date = f'{year}-{m:02d}-{last_day:02d}'
+            expense_filter &= Q(date__gte=start_date, date__lte=end_date)
+        except ValueError:
             pass
     else:
         if date_from:
@@ -417,6 +445,7 @@ def payment_mode_balances_view(request):
             start_date = date_from
         if date_to:
             expense_filter &= Q(date__lte=date_to)
+            end_date = date_to
 
     balances = list(PaymentModeBalance.objects.all())
     explicit_modes = {b.payment_mode for b in balances}
