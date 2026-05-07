@@ -468,22 +468,12 @@ def payment_mode_balances_view(request):
     for bal in balances:
         mode = bal.payment_mode
         
-        # Calculate initial balance up to just before the selected range
-        initial_balance = bal.initial_balance
+        # As per request, do not carry over balances from previous months.
+        # Only show the available balance for the specifically filtered period.
         if start_date:
-            credits_before = Expense.objects.filter(
-                date__lt=start_date, credit_payment_mode=mode
-            ).aggregate(
-                total=Coalesce(Sum('credited_amount'), Decimal('0.00'))
-            )['total']
-            
-            debits_before = Expense.objects.filter(
-                date__lt=start_date, debit_payment_mode=mode
-            ).aggregate(
-                total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
-            )['total']
-            
-            initial_balance = initial_balance + credits_before - debits_before
+            initial_balance = Decimal('0.00')
+        else:
+            initial_balance = bal.initial_balance
 
         # Credits with this payment mode (filtered)
         total_credits = Expense.objects.filter(
