@@ -178,10 +178,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS
 # ---------------------------------------------------------------------------
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', default=False)
-CORS_ALLOWED_ORIGINS = env_list(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173,http://127.0.0.1:5173',
-)
+DEFAULT_CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://expense-fe-sigma.vercel.app',
+    'https://etracker.systimus.in',
+]
+CORS_ALLOWED_ORIGINS = sorted(set(
+    DEFAULT_CORS_ALLOWED_ORIGINS
+    + env_list('CORS_ALLOWED_ORIGINS', default='')
+))
 # Default regex matches all Vercel preview + production URLs.
 # Override via CORS_ALLOWED_ORIGIN_REGEXES env var (comma-separated).
 CORS_ALLOWED_ORIGIN_REGEXES = env_list(
