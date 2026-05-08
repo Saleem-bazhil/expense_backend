@@ -49,10 +49,7 @@ def env_int(name: str, default: int) -> int:
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-production')
 DEBUG = env_bool('DJANGO_DEBUG', default=False)
 
-ALLOWED_HOSTS = env_list(
-    'DJANGO_ALLOWED_HOSTS',
-    default='localhost,127.0.0.1,apiexpense.bazhilgroups.in',
-)
+ALLOWED_HOSTS = ['*']
 
 # Reverse-proxy awareness (Dokploy/Traefik, nginx, etc.)
 USE_X_FORWARDED_HOST = env_bool('DJANGO_USE_X_FORWARDED_HOST', default=True)
@@ -177,7 +174,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ---------------------------------------------------------------------------
 # CORS
 # ---------------------------------------------------------------------------
-CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', default=True)
+CORS_ALLOW_ALL_ORIGINS = True
 DEFAULT_CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
