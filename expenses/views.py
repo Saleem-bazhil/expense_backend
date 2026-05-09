@@ -468,12 +468,20 @@ def payment_mode_balances_view(request):
     for bal in balances:
         mode = bal.payment_mode
         
-        # As per request, do not carry over balances from previous months.
-        # Only show the available balance for the specifically filtered period.
+        # Calculate actual initial balance taking into account transactions before start_date
+        period_initial = bal.initial_balance
         if start_date:
-            initial_balance = Decimal('0.00')
-        else:
-            initial_balance = bal.initial_balance
+            past_credits = Expense.objects.filter(
+                date__lt=start_date, credit_payment_mode=mode
+            ).aggregate(
+                total=Coalesce(Sum('credited_amount'), Decimal('0.00'))
+            )['total']
+            past_debits = Expense.objects.filter(
+                date__lt=start_date, debit_payment_mode=mode
+            ).aggregate(
+                total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
+            )['total']
+            period_initial += past_credits - past_debits
 
         # Credits with this payment mode (filtered)
         total_credits = Expense.objects.filter(
@@ -488,11 +496,15 @@ def payment_mode_balances_view(request):
             total=Coalesce(Sum('debited_amount'), Decimal('0.00'))
         )['total']
         
-        current = initial_balance + total_credits - total_debits
-        bal.initial_balance = initial_balance
+        current = period_initial + total_credits - total_debits
+        period_available = total_credits - total_debits
+
+        bal.initial_balance = period_initial
         bal.current_balance = current
         bal.total_credits = total_credits
         bal.total_debits = total_debits
+        bal.period_available = period_available
+        
         result.append(bal)
 
     serializer = PaymentModeBalanceSerializer(result, many=True)
