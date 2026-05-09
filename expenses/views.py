@@ -686,3 +686,138 @@ def billing_reminder_delete(request, pk):
 
     reminder.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+def import_expenses(request):
+    """Import expenses from Excel or CSV file."""
+    file_obj = request.FILES.get('file')
+    if not file_obj:
+        return Response({'detail': 'No file was uploaded.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    import openpyxl
+    from io import BytesIO
+
+    try:
+        if file_obj.name.endswith('.xlsx'):
+            wb = openpyxl.load_workbook(file_obj, data_only=True)
+            ws = wb.active
+            rows = list(ws.iter_rows(values_only=True))
+        elif file_obj.name.endswith('.csv'):
+            import csv
+            file_data = file_obj.read().decode('utf-8-sig').splitlines()
+            reader = csv.reader(file_data)
+            rows = list(reader)
+        else:
+            return Response({'detail': 'Only .xlsx and .csv file formats are supported.'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({'detail': f'Error reading file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not rows:
+        return Response({'detail': 'The uploaded file is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    headers = [str(cell).strip().lower() for cell in rows[0] if cell is not None]
+    
+    header_mapping = {
+        'date': 'date',
+        'category': 'category',
+        'branch': 'branch',
+        'credit amount': 'credited_amount',
+        'credit_amount': 'credited_amount',
+        'credited_amount': 'credited_amount',
+        'credit remark': 'credit_remark',
+        'credit_remark': 'credit_remark',
+        'credit person': 'credit_person',
+        'credit_person': 'credit_person',
+        'credit payment mode': 'credit_payment_mode',
+        'credit_payment_mode': 'credit_payment_mode',
+        'debit amount': 'debited_amount',
+        'debit_amount': 'debited_amount',
+        'debited_amount': 'debited_amount',
+        'debit remark': 'debit_remark',
+        'debit_remark': 'debit_remark',
+        'debit person': 'debit_person',
+        'debit_person': 'debit_person',
+        'debit payment mode': 'debit_payment_mode',
+        'debit_payment_mode': 'debit_payment_mode',
+    }
+
+    import_data = []
+    for row_idx, row in enumerate(rows[1:], 2):
+        if not any(cell is not None and str(cell).strip() != '' for cell in row):
+            continue
+
+        row_dict = {}
+        for col_idx, cell in enumerate(row):
+            if col_idx < len(headers):
+                header = headers[col_idx]
+                field = header_mapping.get(header)
+                if field:
+                    if cell is None:
+                        row_dict[field] = None
+                    elif field == 'date':
+                        import datetime as dt
+                        if isinstance(cell, (dt.datetime, dt.date)):
+                            if isinstance(cell, dt.datetime):
+                                row_dict[field] = cell.date().isoformat()
+                            else:
+                                row_dict[field] = cell.isoformat()
+                        else:
+                            try:
+                                parsed_date = datetime.strptime(str(cell).strip(), '%Y-%m-%d')
+                                row_dict[field] = parsed_date.date().isoformat()
+                            except ValueError:
+                                try:
+                                    parsed_date = datetime.strptime(str(cell).strip(), '%d-%m-%Y')
+                                    row_dict[field] = parsed_date.date().isoformat()
+                                except ValueError:
+                                    try:
+                                        # Try DD/MM/YYYY
+                                        parsed_date = datetime.strptime(str(cell).strip(), '%d/%m/%Y')
+                                        row_dict[field] = parsed_date.date().isoformat()
+                                    except ValueError:
+                                        try:
+                                            # Try YYYY/MM/DD
+                                            parsed_date = datetime.strptime(str(cell).strip(), '%Y/%m/%d')
+                                            row_dict[field] = parsed_date.date().isoformat()
+                                        except ValueError:
+                                            row_dict[field] = str(cell).strip()
+                    elif field in ['credited_amount', 'debited_amount']:
+                        try:
+                            val = float(cell)
+                            row_dict[field] = val if val > 0 else None
+                        except (ValueError, TypeError):
+                            row_dict[field] = None
+                    else:
+                        row_dict[field] = str(cell).strip()
+
+        if 'credited_amount' not in row_dict:
+            row_dict['credited_amount'] = None
+        if 'debited_amount' not in row_dict:
+            row_dict['debited_amount'] = None
+
+        import_data.append((row_idx, row_dict))
+
+    errors = []
+    success_count = 0
+
+    for row_idx, data in import_data:
+        serializer = ExpenseCreateSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            success_count += 1
+        else:
+            err_msg = ", ".join([f"{k}: {', '.join(v)}" for k, v in serializer.errors.items()])
+            errors.append(f"Row {row_idx}: {err_msg}")
+
+    if errors:
+        return Response({
+            'detail': f'Import completed with errors. Successfully imported {success_count} entries.',
+            'errors': errors,
+            'success_count': success_count
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        'detail': f'Successfully imported {success_count} expenses.',
+        'success_count': success_count
+    }, status=status.HTTP_201_CREATED)

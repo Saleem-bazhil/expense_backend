@@ -10,6 +10,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('dashboard/', views.dashboard_view, name='dashboard'),
     path('export/', views.export_expenses, name='export'),
+    path('import/', views.import_expenses, name='import'),
     path('categories/', views.categories_view, name='categories'),
     path('payment-mode-balances/', views.payment_mode_balances_view, name='payment-mode-balances'),
     path('payment-mode-balances/set/', views.payment_mode_balance_set, name='payment-mode-balance-set'),
