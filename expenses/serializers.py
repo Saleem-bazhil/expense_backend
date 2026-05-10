@@ -115,10 +115,10 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
                 if self.instance and self.instance.debit_payment_mode == mode:
                     current_balance += (self.instance.debited_amount or Decimal('0.00'))
 
-                if current_balance < debit:
-                    raise serializers.ValidationError(
-                        f"Insufficient funds! You have only \u20b9{current_balance:,.2f} balance in {mode}."
-                    )
+                # if current_balance < debit:
+                #     raise serializers.ValidationError(
+                #         f"Insufficient funds! You have only \u20b9{current_balance:,.2f} balance in {mode}."
+                #     )
 
         return data
 
