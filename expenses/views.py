@@ -9,7 +9,7 @@ from django.db.models.functions import Coalesce, TruncMonth
 from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.authtoken.models import Token
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
@@ -113,6 +113,10 @@ class ExpenseViewSet(viewsets.ModelViewSet):
                 
             expense.running_balances = balances.copy()
 
+        # To show newest first, reverse the list AFTER calculating running balances,
+        # then paginate. This keeps correct balance cache on each object.
+        expenses.reverse()
+
         # Pagination
         page = self.paginate_queryset(expenses)
         if page is not None:
@@ -121,6 +125,12 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(expenses, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['delete'], url_path='delete-all')
+    def delete_all(self, request):
+        """Utility endpoint to delete all expenses."""
+        count, _ = Expense.objects.all().delete()
+        return Response({'detail': f'Successfully deleted {count} expenses.'}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -699,11 +709,12 @@ def import_expenses(request):
     from io import BytesIO
 
     try:
-        if file_obj.name.endswith('.xlsx'):
+        fname = file_obj.name.lower()
+        if fname.endswith('.xlsx'):
             wb = openpyxl.load_workbook(file_obj, data_only=True)
             ws = wb.active
             rows = list(ws.iter_rows(values_only=True))
-        elif file_obj.name.endswith('.csv'):
+        elif fname.endswith('.csv') or fname.endswith('.txt'):
             import csv
             file_data = file_obj.read().decode('utf-8-sig').splitlines()
             reader = csv.reader(file_data)
@@ -716,12 +727,32 @@ def import_expenses(request):
     if not rows:
         return Response({'detail': 'The uploaded file is empty.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    headers = [str(cell).strip().lower() for cell in rows[0] if cell is not None]
+    # Dynamically find the header row by looking for known keywords
+    header_keywords = {'date', 'category', 'branch', 'amount', 'credit', 'debit', 'type', 'remark'}
+    header_idx = 0
+    headers = []
+
+    for i, row in enumerate(rows):
+        curr_headers = [str(cell).strip().lower() if cell is not None else '' for cell in row]
+        # If this row has multiple header keywords, it's probably our header row
+        if any(k in curr_headers or any(k in h for h in curr_headers) for k in header_keywords):
+            headers = curr_headers
+            header_idx = i
+            break
+    else:
+        # Fallback to first row if keywords aren't matched explicitly
+        headers = [str(cell).strip().lower() if cell is not None else '' for cell in rows[0]]
+        header_idx = 0
+
+    print(f"[IMPORT DEBUG] Found headers at row {header_idx + 1}: {headers}")
+    print(f"[IMPORT DEBUG] Total data rows to process: {len(rows) - header_idx - 1}")
     
     header_mapping = {
         'date': 'date',
         'category': 'category',
         'branch': 'branch',
+        'credit': 'credited_amount',
+        'debit': 'debited_amount',
         'credit amount': 'credited_amount',
         'credit_amount': 'credited_amount',
         'credited_amount': 'credited_amount',
@@ -740,21 +771,33 @@ def import_expenses(request):
         'debit_person': 'debit_person',
         'debit payment mode': 'debit_payment_mode',
         'debit_payment_mode': 'debit_payment_mode',
+        'remark': 'remark',
+        'person': 'person',
+        'mode': 'mode',
+        'payment mode': 'mode',
+        'amount': 'amount',
+        'type': 'type',
+        'expense type': 'type',
+        'transaction type': 'type',
     }
-
+ 
     import_data = []
-    for row_idx, row in enumerate(rows[1:], 2):
+    # Start processing data rows occurring AFTER the header row
+    for row_idx, row in enumerate(rows[header_idx + 1:], header_idx + 2):
         if not any(cell is not None and str(cell).strip() != '' for cell in row):
             continue
-
+ 
         row_dict = {}
         for col_idx, cell in enumerate(row):
             if col_idx < len(headers):
                 header = headers[col_idx]
                 field = header_mapping.get(header)
                 if field:
-                    if cell is None:
-                        row_dict[field] = None
+                    if cell is None or str(cell).strip() == '':
+                        if field in ['credited_amount', 'debited_amount', 'amount']:
+                            row_dict[field] = None
+                        else:
+                            row_dict[field] = ''
                     elif field == 'date':
                         import datetime as dt
                         if isinstance(cell, (dt.datetime, dt.date)):
@@ -764,58 +807,181 @@ def import_expenses(request):
                                 row_dict[field] = cell.isoformat()
                         else:
                             try:
-                                parsed_date = datetime.strptime(str(cell).strip(), '%Y-%m-%d')
+                                date_str = str(cell).strip().split(' ')[0]
+                                parsed_date = datetime.strptime(date_str, '%Y-%m-%d')
                                 row_dict[field] = parsed_date.date().isoformat()
                             except ValueError:
                                 try:
-                                    parsed_date = datetime.strptime(str(cell).strip(), '%d-%m-%Y')
+                                    date_str = str(cell).strip().split(' ')[0]
+                                    parsed_date = datetime.strptime(date_str, '%d-%m-%Y')
                                     row_dict[field] = parsed_date.date().isoformat()
                                 except ValueError:
                                     try:
-                                        # Try DD/MM/YYYY
-                                        parsed_date = datetime.strptime(str(cell).strip(), '%d/%m/%Y')
+                                        date_str = str(cell).strip().split(' ')[0]
+                                        parsed_date = datetime.strptime(date_str, '%d/%m/%Y')
                                         row_dict[field] = parsed_date.date().isoformat()
                                     except ValueError:
                                         try:
-                                            # Try YYYY/MM/DD
-                                            parsed_date = datetime.strptime(str(cell).strip(), '%Y/%m/%d')
+                                            date_str = str(cell).strip().split(' ')[0]
+                                            parsed_date = datetime.strptime(date_str, '%Y/%m/%d')
                                             row_dict[field] = parsed_date.date().isoformat()
                                         except ValueError:
-                                            row_dict[field] = str(cell).strip()
+                                            try:
+                                                date_str = str(cell).strip().split(' ')[0]
+                                                parsed_date = datetime.strptime(date_str, '%d.%m.%Y')
+                                                row_dict[field] = parsed_date.date().isoformat()
+                                            except ValueError:
+                                                try:
+                                                    date_str = str(cell).strip().split(' ')[0]
+                                                    parsed_date = datetime.strptime(date_str, '%Y.%m.%d')
+                                                    row_dict[field] = parsed_date.date().isoformat()
+                                                except ValueError:
+                                                    try:
+                                                        date_str = str(cell).strip().split(' ')[0]
+                                                        parsed_date = datetime.strptime(date_str, '%d-%b-%Y')
+                                                        row_dict[field] = parsed_date.date().isoformat()
+                                                    except ValueError:
+                                                        try:
+                                                            date_str = " ".join(str(cell).strip().split(' ')[:3])
+                                                            parsed_date = datetime.strptime(date_str, '%d %b %Y')
+                                                            row_dict[field] = parsed_date.date().isoformat()
+                                                        except ValueError:
+                                                            row_dict[field] = str(cell).strip()
                     elif field in ['credited_amount', 'debited_amount']:
                         try:
-                            val = float(cell)
+                            cleaned_val = str(cell).replace('₹', '').replace('Rs', '').replace(',', '').strip()
+                            val = float(cleaned_val)
                             row_dict[field] = val if val > 0 else None
                         except (ValueError, TypeError):
                             row_dict[field] = None
+                    elif field == 'amount':
+                        try:
+                            cleaned_val = str(cell).replace('₹', '').replace('Rs', '').replace(',', '').strip()
+                            row_dict['amount'] = float(cleaned_val)
+                        except (ValueError, TypeError):
+                            row_dict['amount'] = None
+                    elif field == 'type':
+                        row_dict['type'] = str(cell).strip().lower()
                     else:
                         row_dict[field] = str(cell).strip()
+
+        # Handle single 'amount' and 'type' column format if separate columns aren't filled
+        if row_dict.get('amount') is not None:
+            amt = row_dict['amount']
+            t = row_dict.get('type', 'debit')
+            if 'credit' in t:
+                row_dict['credited_amount'] = amt
+                row_dict['debited_amount'] = None
+            else:
+                row_dict['debited_amount'] = amt
+                row_dict['credited_amount'] = None
 
         if 'credited_amount' not in row_dict:
             row_dict['credited_amount'] = None
         if 'debited_amount' not in row_dict:
             row_dict['debited_amount'] = None
 
+        is_credit = row_dict.get('credited_amount') is not None
+
+        if 'remark' in row_dict:
+            if is_credit:
+                row_dict['credit_remark'] = row_dict['remark']
+                row_dict['debit_remark'] = ''
+            else:
+                row_dict['debit_remark'] = row_dict['remark']
+                row_dict['credit_remark'] = ''
+
+        if 'person' in row_dict:
+            if is_credit:
+                row_dict['credit_person'] = row_dict['person']
+                row_dict['debit_person'] = ''
+            else:
+                row_dict['debit_person'] = row_dict['person']
+                row_dict['credit_person'] = ''
+
+        if 'mode' in row_dict:
+            if is_credit:
+                row_dict['credit_payment_mode'] = row_dict['mode']
+                row_dict['debit_payment_mode'] = ''
+            else:
+                row_dict['debit_payment_mode'] = row_dict['mode']
+                row_dict['credit_payment_mode'] = ''
+
+        # Normalize payment modes to valid Title Case/Uppercase choice values
+        def normalize_mode(val):
+            if not val:
+                return ''
+            val_lower = str(val).strip().lower()
+            if val_lower in ['cash', 'c']:
+                return 'Cash'
+            if val_lower in ['bank transfer', 'bank_transfer', 'bank', 'transfer']:
+                return 'Bank Transfer'
+            if val_lower in ['gpay', 'g-pay', 'google pay']:
+                return 'GPay'
+            if val_lower in ['phonepe', 'phone-pe', 'phone pe']:
+                return 'PhonePe'
+            if val_lower in ['upi']:
+                return 'UPI'
+            if val_lower in ['cheque']:
+                return 'Cheque'
+            return 'Other'
+
+        if row_dict.get('credit_payment_mode'):
+            row_dict['credit_payment_mode'] = normalize_mode(row_dict['credit_payment_mode'])
+        if row_dict.get('debit_payment_mode'):
+            row_dict['debit_payment_mode'] = normalize_mode(row_dict['debit_payment_mode'])
+
+        if 'branch' not in row_dict or not row_dict['branch']:
+            row_dict['branch'] = 'Main Branch'
+        if 'category' not in row_dict or not row_dict['category']:
+            row_dict['category'] = 'Misc'
+        if 'date' not in row_dict or not row_dict['date']:
+            import datetime as dt
+            row_dict['date'] = dt.date.today().isoformat()
+
+        # Final sanitization: convert any leftover None/missing for string fields to empty string
+        string_fields = [
+            'credit_remark', 'debit_remark',
+            'credit_person', 'debit_person',
+            'credit_payment_mode', 'debit_payment_mode',
+            'category', 'branch'
+        ]
+        for f in string_fields:
+            if row_dict.get(f) is None:
+                row_dict[f] = ''
+
         import_data.append((row_idx, row_dict))
 
     errors = []
     success_count = 0
 
+    # Fields accepted by the serializer
+    valid_fields = {
+        'date', 'category', 'branch',
+        'credited_amount', 'credit_remark', 'credit_person', 'credit_payment_mode',
+        'debited_amount', 'debit_remark', 'debit_person', 'debit_payment_mode',
+    }
+
     for row_idx, data in import_data:
-        serializer = ExpenseCreateSerializer(data=data)
+        # Strip out extra keys that aren't in the serializer
+        clean_data = {k: v for k, v in data.items() if k in valid_fields}
+        print(f"[IMPORT DEBUG] Row {row_idx} clean_data: {clean_data}")
+        serializer = ExpenseCreateSerializer(data=clean_data)
         if serializer.is_valid():
             serializer.save()
             success_count += 1
+            print(f"[IMPORT DEBUG] Row {row_idx}: SAVED OK")
         else:
             err_msg = ", ".join([f"{k}: {', '.join(v)}" for k, v in serializer.errors.items()])
             errors.append(f"Row {row_idx}: {err_msg}")
+            print(f"[IMPORT DEBUG] Row {row_idx} ERRORS: {serializer.errors}")
 
     if errors:
         return Response({
-            'detail': f'Import completed with errors. Successfully imported {success_count} entries.',
+            'detail': f'Import completed. Successfully imported {success_count} of {success_count + len(errors)} entries.',
             'errors': errors,
             'success_count': success_count
-        }, status=status.HTTP_400_BAD_REQUEST)
+        }, status=status.HTTP_200_OK)
 
     return Response({
         'detail': f'Successfully imported {success_count} expenses.',
