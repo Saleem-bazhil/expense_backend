@@ -15,8 +15,8 @@ from rest_framework.response import Response
 
 from rest_framework.pagination import PageNumberPagination
 
-from .models import Branch, Expense, PaymentModeBalance, BillingReminder
-from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer, PaymentModeBalanceSerializer, BillingReminderSerializer
+from .models import Branch, Expense, PaymentModeBalance, BillingReminder, PettyCashDebit
+from .serializers import BranchSerializer, ExpenseSerializer, ExpenseCreateSerializer, PaymentModeBalanceSerializer, BillingReminderSerializer, PettyCashDebitSerializer
 
 
 class ExpensePagination(PageNumberPagination):
@@ -987,3 +987,75 @@ def import_expenses(request):
         'detail': f'Successfully imported {success_count} expenses.',
         'success_count': success_count
     }, status=status.HTTP_201_CREATED)
+
+
+class PettyCashDebitViewSet(viewsets.ModelViewSet):
+    queryset = PettyCashDebit.objects.select_related('branch').all()
+    serializer_class = PettyCashDebitSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = PettyCashDebit.objects.select_related('branch').all()
+        branch_val = self.request.query_params.get('branch')
+        if branch_val:
+            if branch_val.isdigit():
+                qs = qs.filter(branch_id=branch_val)
+            else:
+                qs = qs.filter(branch__location__icontains=branch_val)
+        
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+            
+        return qs.order_by('-date', '-created_at')
+
+
+@api_view(['GET'])
+def petty_cash_summary(request):
+    """Get petty cash summary, including credits (from Expenses) and debits."""
+    credits_qs = Expense.objects.filter(category__icontains='petty')
+    debits_qs = PettyCashDebit.objects.all()
+
+    # Apply branch and date filters
+    branch_val = request.query_params.get('branch')
+    if branch_val:
+        if branch_val.isdigit():
+            credits_qs = credits_qs.filter(branch_id=branch_val)
+            debits_qs = debits_qs.filter(branch_id=branch_val)
+        else:
+            credits_qs = credits_qs.filter(branch__location__icontains=branch_val)
+            debits_qs = debits_qs.filter(branch__location__icontains=branch_val)
+
+    date_from = request.query_params.get('date_from')
+    date_to = request.query_params.get('date_to')
+    if date_from:
+        credits_qs = credits_qs.filter(date__gte=date_from)
+        debits_qs = debits_qs.filter(date__gte=date_from)
+    if date_to:
+        credits_qs = credits_qs.filter(date__lte=date_to)
+        debits_qs = debits_qs.filter(date__lte=date_to)
+
+    # Calculate totals
+    totals = credits_qs.aggregate(
+        credits_sum=Coalesce(Sum('credited_amount'), Decimal('0.00')),
+        debits_sum=Coalesce(Sum('debited_amount'), Decimal('0.00')),
+    )
+    total_credits = totals['credits_sum'] + totals['debits_sum']
+    
+    total_debits = debits_qs.aggregate(total=Coalesce(Sum('amount'), Decimal('0.00')))['total']
+    balance = total_credits - total_debits
+
+    credits_data = ExpenseSerializer(credits_qs.order_by('-date', '-created_at'), many=True).data
+    debits_data = PettyCashDebitSerializer(debits_qs.order_by('-date', '-created_at'), many=True).data
+
+    return Response({
+        'balance': str(balance),
+        'total_credits': str(total_credits),
+        'total_debits': str(total_debits),
+        'credits': credits_data,
+        'debits': debits_data,
+    })
+

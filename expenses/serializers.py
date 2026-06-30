@@ -1,6 +1,6 @@
 from decimal import Decimal
 from rest_framework import serializers
-from .models import Branch, Expense, PaymentModeBalance, BillingReminder
+from .models import Branch, Expense, PaymentModeBalance, BillingReminder, PettyCashDebit
 
 
 class BranchSerializer(serializers.ModelSerializer):
@@ -153,3 +153,21 @@ class BillingReminderSerializer(serializers.ModelSerializer):
             'branch', 'branch_location',
             'created_at', 'updated_at',
         ]
+
+
+class PettyCashDebitSerializer(serializers.ModelSerializer):
+    branch = serializers.CharField()
+    branch_location = serializers.CharField(source='branch.location', read_only=True)
+
+    class Meta:
+        model = PettyCashDebit
+        fields = [
+            'id', 'date', 'amount', 'remark', 'person', 'branch', 'branch_location', 'created_at'
+        ]
+
+    def validate_branch(self, value):
+        if not value:
+            raise serializers.ValidationError("Branch location is required.")
+        branch, _ = Branch.objects.get_or_create(location=value)
+        return branch
+

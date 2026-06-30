@@ -177,3 +177,25 @@ class BillingReminder(models.Model):
     def __str__(self):
         return f"{self.title} — ₹{self.amount} ({self.get_frequency_display()})"
 
+
+class PettyCashDebit(models.Model):
+    """Tracks direct cash expenditures from petty cash drawer."""
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    remark = models.CharField(max_length=300, blank=True, default='')
+    person = models.CharField(max_length=200, blank=True, default='')
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.CASCADE,
+        related_name='petty_cash_debits',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+    def __str__(self):
+        return f"{self.date} | {self.amount} | {self.branch.location}"
+
+

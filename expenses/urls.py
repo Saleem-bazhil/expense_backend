@@ -5,10 +5,12 @@ from . import views
 router = DefaultRouter()
 router.register(r'expenses', views.ExpenseViewSet, basename='expense')
 router.register(r'branches', views.BranchViewSet, basename='branch')
+router.register(r'petty-cash-debits', views.PettyCashDebitViewSet, basename='petty-cash-debit')
 
 urlpatterns = [
     path('', include(router.urls)),
     path('dashboard/', views.dashboard_view, name='dashboard'),
+    path('petty-cash/summary/', views.petty_cash_summary, name='petty-cash-summary'),
     path('export/', views.export_expenses, name='export'),
     path('import/', views.import_expenses, name='import'),
     path('categories/', views.categories_view, name='categories'),
